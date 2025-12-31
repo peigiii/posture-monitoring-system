@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+    <title>Real-Time Posture Monitoring System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1640029074/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3.1620248257/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1635988162/pose.js" crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="styles/main.css">
+    <!-- External JavaScript modules -->
+    <script src="js/constants.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/algorithms.js"></script>
+    <script src="js/i18n.js"></script>
+    <script src="js/posture-analysis.js"></script>
+    <script src="js/drawing-utils.js"></script>
+</head>
+<body>
+    <div id="root"></div>
+    <script type="text/babel">
+        // ============================================================================
+        // Real-Time Posture Monitoring System - Main Application
+        // ============================================================================
+        // This application uses MediaPipe Pose to detect and analyze body posture
+        // in real-time, providing feedback and tracking for posture improvement.
+        // ============================================================================
+        
+        console.log('✅ Application starting...');
+        
+        // Check if React is loaded
+        if (typeof React === 'undefined') {
+            console.error('❌ React not loaded');
+            document.body.innerHTML = '<div style="color: red; padding: 20px; text-align: center;"><h1>Error: React Not Loaded</h1><p>Please check your internet connection or CDN accessibility</p></div>';
+            throw new Error('React is not loaded');
+        }
+        
+        const { useState, useEffect, useRef } = React;
+        
+        // ============================================================================
+        // Main Application Component
+        // ============================================================================
+        function PostureMonitorApp() {
+            // State management
+            const [isMonitoring, setIsMonitoring] = useState(false);
+            const [postureStatus, setPostureStatus] = useState('good');
+            const [neckAngle, setNeckAngle] = useState(0);
+            const [torsoAngle, setTorsoAngle] = useState(0);
+            const [goodTime, setGoodTime] = useState(0);
+            const [badTime, setBadTime] = useState(0);
+            const [viewMode, setViewMode] = useState('side');
+            const [thresholdMode, setThresholdMode] = useState('standard');
+            
+            // Refs
+            const videoRef = useRef(null);
+            const canvasRef = useRef(null);
+            const poseRef = useRef(null);
+            const cameraRef = useRef(null);
+            const timerRef = useRef(null);
+            
+            // Initialize MediaPipe Pose
+            useEffect(() => {
+                if (typeof Pose !== 'undefined') {
+                    poseRef.current = new Pose({
+                        locateFile: (file) => {
+                            return `https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1635988162/${file}`;
+                        }
+                    });
+                    
+                    poseRef.current.setOptions({
+                        modelComplexity: 1,
+                        smoothLandmarks: true,
+                        enableSegmentation: false,
+                        smoothSegmentation: false,
+                        minDetectionConfidence: 0.5,
+                        minTrackingConfidence: 0.5
+                    });
+                    
+                    poseRef.current.onResults(onResults);
+                }
+            }, []);
+            
+            // Start/Stop monitoring
+            const toggleMonitoring = async () => {
+                if (!isMonitoring) {
+                    try {
+                        const stream = await navigator.mediaDevices.getUserMedia({ 
+                            video: { width: 1280, height: 720 } 
+                        });
+                        videoRef.current.srcObject = stream;
+                        
+                        if (typeof Camera !== 'undefined') {
+                            cameraRef.current = new Camera(videoRef.current, {
+                                onFrame: async () => {
+                                    await poseRef.current.send({ image: videoRef.current });
+                                },
+                                width: 1280,
+                                height: 720
+                            });
+                            cameraRef.current.start();
+                        }
+                        
+                        setIsMonitoring(true);
+                        startTimer();
+                    } catch (error) {
+                        console.error('Camera access error:', error);
+                        alert('Unable to access camera. Please check permissions.');
+                    }
+                } else {
+                    stopMonitoring();
+                }
+            };
+            
+            // Process pose detection results
+            const onResults = (results) => {
+                if (!results.poseLandmarks) return;
+                
+                const canvas = canvasRef.current;
+                const ctx = canvas.getContext('2d');
+                
+                // Clear canvas
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                
+                // Draw video frame
+                ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+                
+                // Draw pose landmarks
+                if (typeof drawConnectors !== 'undefined' && typeof POSE_CONNECTIONS !== 'undefined') {
+                    drawConnectors(ctx, results.poseLandmarks, POSE_CONNECTIONS, {
+                        color: '#00FF00',
+                        lineWidth: 4
+                    });
+                    drawLandmarks(ctx, results.poseLandmarks, {
+                        color: '#FF0000',
+                        lineWidth: 2
+                    });
+                }
+                
+                // Analyze posture
+                analyzePosture(results.poseLandmarks);
+            };
+            
+            // Analyze posture from landmarks
+            const analyzePosture = (landmarks) => {
+                // Get current thresholds
+                const thresholds = getCurrentThresholds();
+                
+                // Calculate angles (simplified version)
+                const lShoulder = landmarks[POSE_LANDMARKS.LEFT_SHOULDER];
+                const lEar = landmarks[POSE_LANDMARKS.LEFT_EAR];
+                const lHip = landmarks[POSE_LANDMARKS.LEFT_HIP];
+                
+                if (lShoulder && lEar && lHip) {
+                    // Calculate neck angle
+                    const neck = calculateAnglePrecise(
+                        { x: lShoulder.x * 1280, y: lShoulder.y * 720 },
+                        { x: lEar.x * 1280, y: lEar.y * 720 },
+                        { x: lShoulder.x * 1280, y: (lShoulder.y * 720) - 100 }
+                    );
+                    
+                    // Calculate torso angle
+                    const torso = calculateAnglePrecise(
+                        { x: lHip.x * 1280, y: lHip.y * 720 },
+                        { x: lShoulder.x * 1280, y: lShoulder.y * 720 },
+                        { x: lHip.x * 1280, y: (lHip.y * 720) - 100 }
+                    );
+                    
+                    setNeckAngle(neck);
+                    setTorsoAngle(torso);
+                    
+                    // Determine posture status
+                    const isGood = neck < thresholds.neck && torso < thresholds.torso;
+                    setPostureStatus(isGood ? 'good' : 'bad');
+                }
+            };
+            
+            // Timer for tracking posture duration
+            const startTimer = () => {
+                timerRef.current = setInterval(() => {
+                    if (postureStatus === 'good') {
+                        setGoodTime(prev => prev + 1);
+                    } else {
+                        setBadTime(prev => prev + 1);
+                    }
+                }, 1000);
+            };
+            
+            const stopMonitoring = () => {
+                if (cameraRef.current) {
+                    cameraRef.current.stop();
+                }
+                if (videoRef.current && videoRef.current.srcObject) {
+                    videoRef.current.srcObject.getTracks().forEach(track => track.stop());
+                }
+                if (timerRef.current) {
+                    clearInterval(timerRef.current);
+                }
+                setIsMonitoring(false);
+            };
+            
+            // Format time display
+            const formatTime = (seconds) => {
+                const mins = Math.floor(seconds / 60);
+                const secs = seconds % 60;
+                return `${mins}:${secs.toString().padStart(2, '0')}`;
+            };
+            
+            return (
+                <div className="min-h-screen bg-gray-100 p-4">
+                    <div className="max-w-7xl mx-auto">
+                        {/* Header */}
+                        <header className="bg-white shadow-md rounded-lg p-6 mb-6">
+                            <h1 className="text-3xl font-bold text-gray-800">
+                                Real-Time Posture Monitoring System
+                            </h1>
+                            <p className="text-gray-600 mt-2">
+                                Monitor your posture in real-time with AI-powered detection
+                            </p>
+                        </header>
+                        
+                        {/* Main Content */}
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                            {/* Video Feed */}
+                            <div className="lg:col-span-2">
+                                <div className="bg-white rounded-lg shadow-md p-6">
+                                    <h2 className="text-xl font-semibold mb-4">Camera Feed</h2>
+                                    <div className="relative bg-black rounded-lg overflow-hidden" style={{ aspectRatio: '16/9' }}>
+                                        <video ref={videoRef} className="hidden" autoPlay playsInline></video>
+                                        <canvas 
+                                            ref={canvasRef} 
+                                            width="1280" 
+                                            height="720"
+                                            className="w-full h-full"
+                                        ></canvas>
+                                        
+                                        {/* Status Overlay */}
+                                        <div className="absolute top-4 right-4 bg-black bg-opacity-70 text-white px-4 py-2 rounded-lg">
+                                            <div className={`text-2xl font-bold ${postureStatus === 'good' ? 'text-green-400' : 'text-red-400'}`}>
+                                                {postureStatus === 'good' ? '✓ Good Posture' : '✗ Bad Posture'}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    {/* Controls */}
+                                    <div className="mt-4 flex gap-4">
+                                        <button
+                                            onClick={toggleMonitoring}
+                                            className={`px-6 py-3 rounded-lg font-semibold text-white ${
+                                                isMonitoring 
+                                                    ? 'bg-red-500 hover:bg-red-600' 
+                                                    : 'bg-blue-500 hover:bg-blue-600'
+                                            }`}
+                                        >
+                                            {isMonitoring ? 'Stop Monitoring' : 'Start Monitoring'}
+                                        </button>
+                                        
+                                        <select
+                                            value={thresholdMode}
+                                            onChange={(e) => setThresholdMode(e.target.value)}
+                                            className="px-4 py-2 border border-gray-300 rounded-lg"
+                                        >
+                                            <option value="standard">Standard Mode</option>
+                                            <option value="sciRelaxed">SCI Relaxed Mode</option>
+                                            <option value="sciStrict">SCI Strict Mode</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            {/* Statistics Panel */}
+                            <div className="space-y-6">
+                                {/* Angles Display */}
+                                <div className="bg-white rounded-lg shadow-md p-6">
+                                    <h2 className="text-xl font-semibold mb-4">Current Angles</h2>
+                                    <div className="space-y-4">
+                                        <div>
+                                            <div className="flex justify-between mb-1">
+                                                <span className="text-gray-600">Neck Angle</span>
+                                                <span className="font-bold">{neckAngle.toFixed(1)}°</span>
+                                            </div>
+                                            <div className="w-full bg-gray-200 rounded-full h-2">
+                                                <div 
+                                                    className={`h-2 rounded-full ${neckAngle < 40 ? 'bg-green-500' : 'bg-red-500'}`}
+                                                    style={{ width: `${Math.min((neckAngle / 60) * 100, 100)}%` }}
+                                                ></div>
+                                            </div>
+                                        </div>
+                                        
+                                        <div>
+                                            <div className="flex justify-between mb-1">
+                                                <span className="text-gray-600">Torso Angle</span>
+                                                <span className="font-bold">{torsoAngle.toFixed(1)}°</span>
+                                            </div>
+                                            <div className="w-full bg-gray-200 rounded-full h-2">
+                                                <div 
+                                                    className={`h-2 rounded-full ${torsoAngle < 15 ? 'bg-green-500' : 'bg-red-500'}`}
+                                                    style={{ width: `${Math.min((torsoAngle / 30) * 100, 100)}%` }}
+                                                ></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                {/* Time Tracking */}
+                                <div className="bg-white rounded-lg shadow-md p-6">
+                                    <h2 className="text-xl font-semibold mb-4">Session Time</h2>
+                                    <div className="space-y-3">
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-gray-600">Good Posture:</span>
+                                            <span className="text-2xl font-bold text-green-600">{formatTime(goodTime)}</span>
+                                        </div>
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-gray-600">Bad Posture:</span>
+                                            <span className="text-2xl font-bold text-red-600">{formatTime(badTime)}</span>
+                                        </div>
+                                        <div className="pt-3 border-t">
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-gray-600">Total:</span>
+                                                <span className="text-xl font-bold">{formatTime(goodTime + badTime)}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                {/* Instructions */}
+                                <div className="bg-blue-50 rounded-lg p-6">
+                                    <h3 className="font-semibold text-blue-900 mb-2">Instructions</h3>
+                                    <ul className="text-sm text-blue-800 space-y-1">
+                                        <li>• Position camera at side view</li>
+                                        <li>• Sit 1-2 meters from camera</li>
+                                        <li>• Ensure good lighting</li>
+                                        <li>• Keep entire body visible</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+        
+        // Render application
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<PostureMonitorApp />);
+        
+        console.log('✅ Application rendered successfully');
+    </script>
+</body>
+</html>
+
