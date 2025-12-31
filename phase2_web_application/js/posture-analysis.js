@@ -1,17 +1,17 @@
 // ============================================================================
-// 姿势分析函数区域 (POSTURE ANALYSIS FUNCTIONS)
+// POSTURE ANALYSIS FUNCTIONS AREA
 // ============================================================================
-// 包含视角检测、侧面对齐检测、正面姿势分析等核心分析函数
+// Contains core analysis functions including view detection, side alignment detection, front posture analysis, etc.
 // ============================================================================
-// 注意：这些函数依赖 constants.js 和 utils.js 中定义的常量和工具函数
-// 由于 HTML 使用 <script type="text/babel">，这些函数将作为全局函数定义
+// Note: These functions depend on constants and utility functions defined in constants.js and utils.js
+// Since HTML uses <script type="text/babel">, these functions will be defined as global functions
 // ============================================================================
 
 /**
- * 检测视角类型（侧面/正面/过渡中）
- * @param {Array} landmarks - MediaPipe 关键点数组
- * @param {number} canvasWidth - 画布宽度
- * @returns {Object} 视角检测结果 {mode, confidence, message, type}
+ * Detect view angle type (side/front/transitioning)
+ * @param {Array} landmarks - MediaPipe landmarks array
+ * @param {number} canvasWidth - Canvas width
+ * @returns {Object} View detection result {mode, confidence, message, type}
  */
 function detectViewAngle(landmarks, canvasWidth) {
     const lShoulder = landmarks[POSE_LANDMARKS.LEFT_SHOULDER];
@@ -21,22 +21,22 @@ function detectViewAngle(landmarks, canvasWidth) {
         return { 
             mode: 'transitioning', 
             confidence: 'low', 
-            message: '调整中...',
+            message: 'Adjusting...',
             type: 'unknown'
         };
     }
 
-    // 计算肩膀横向距离（像素）
+    // Calculate shoulder horizontal distance (pixels)
     const lShoulderX = lShoulder.x * canvasWidth;
     const rShoulderX = rShoulder.x * canvasWidth;
     const shoulderDistance = Math.abs(lShoulderX - rShoulderX);
     
-    // 判断逻辑
+    // Judgment logic
     if (shoulderDistance < VIEW_ANGLE_SIDE_THRESHOLD) {
         return {
             mode: 'side',
             confidence: 'high',
-            message: '侧面模式',
+            message: 'Side View Mode',
             type: 'side',
             shoulderDistance
         };
@@ -44,7 +44,7 @@ function detectViewAngle(landmarks, canvasWidth) {
         return {
             mode: 'front',
             confidence: 'high',
-            message: '正面模式',
+            message: 'Front View Mode',
             type: 'front',
             shoulderDistance
         };
@@ -52,7 +52,7 @@ function detectViewAngle(landmarks, canvasWidth) {
         return {
             mode: 'transitioning',
             confidence: 'low',
-            message: '调整中...',
+            message: 'Adjusting...',
             type: 'unknown',
             shoulderDistance
         };
@@ -60,34 +60,34 @@ function detectViewAngle(landmarks, canvasWidth) {
 }
 
 /**
- * 改进的加权评分系统（正面模式）
- * 使用渐进式扣分，针对SCI患者优化权重
- * @param {Object} metrics - 检测指标 {shoulderTilt, hipTilt, headTilt}
- * @param {Object} thresholds - 阈值配置 {shoulder, hip, head}
- * @param {boolean} isSCIMode - 是否为SCI模式
- * @returns {Object} 评分结果 {score, isGood, breakdown}
+ * Improved weighted scoring system (front view mode)
+ * Uses progressive penalty, optimized weights for SCI patients
+ * @param {Object} metrics - Detection metrics {shoulderTilt, hipTilt, headTilt}
+ * @param {Object} thresholds - Threshold configuration {shoulder, hip, head}
+ * @param {boolean} isSCIMode - Whether in SCI mode
+ * @returns {Object} Scoring result {score, isGood, breakdown}
  */
 function calculatePostureScoreFront(metrics, thresholds, isSCIMode = false) {
     let score = 0.0;
     const breakdown = {};
     
-    // 根据模式调整权重（SCI患者更关注对称性和脊柱健康）
+    // Adjust weights based on mode (SCI patients focus more on symmetry and spinal health)
     const weights = isSCIMode ? {
-        shoulder: 0.30,      // SCI患者肩膀对称性重要
-        hip: 0.30,           // 骨盆倾斜是SCI患者关键指标
-        head: 0.25,          // 头部倾斜也重要
-        spinal: 0.15         // 脊柱弯曲度对SCI患者很重要
+        shoulder: 0.30,      // Shoulder symmetry important for SCI patients
+        hip: 0.30,           // Pelvic tilt is key indicator for SCI patients
+        head: 0.25,          // Head tilt also important
+        spinal: 0.15         // Spinal curvature very important for SCI patients
     } : {
         shoulder: 0.35,
         hip: 0.30,
         head: 0.20,
-        spinal: 0.15          // 脊柱弯曲度对所有人重要
+        spinal: 0.15          // Spinal curvature important for everyone
     };
     
-    // 如果没有脊柱弯曲度数据，重新分配权重
+    // If no spinal data, redistribute weights
     const hasSpinalData = metrics.spinalCurvature !== undefined;
     if (!hasSpinalData) {
-        // 重新归一化权重
+        // Renormalize weights
         const totalWeight = weights.shoulder + weights.hip + weights.head;
         weights.shoulder = weights.shoulder / totalWeight;
         weights.hip = weights.hip / totalWeight;
@@ -95,43 +95,43 @@ function calculatePostureScoreFront(metrics, thresholds, isSCIMode = false) {
         weights.spinal = 0;
     }
     
-    // 优化的渐进式扣分函数（使用更平滑的曲线）
+    // Optimized progressive penalty function (using smoother curve)
     function calculateProgressiveScore(value, threshold, weight) {
         if (value < threshold) {
-            // 在阈值内：完全得分，但接近阈值时稍微扣分（鼓励保持更好姿势）
+            // Within threshold: full score, but slight penalty near threshold (encourage better posture)
             const ratio = value / threshold;
-            // 使用平方函数，让接近阈值时轻微扣分
-            const bonus = ratio < 0.7 ? 1.0 : 1.0 - ((ratio - 0.7) / 0.3) * 0.1; // 70%以下满分，70-100%轻微扣分
+            // Use square function for slight penalty near threshold
+            const bonus = ratio < 0.7 ? 1.0 : 1.0 - ((ratio - 0.7) / 0.3) * 0.1; // Full score below 70%, slight penalty 70-100%
             return weight * bonus;
         } else {
-            // 超过阈值：渐进式扣分（使用指数衰减，更平滑）
+            // Exceeds threshold: progressive penalty (using exponential decay, smoother)
             const excess = value - threshold;
-            const excessRatio = excess / threshold; // 超过阈值的比例
-            // 使用平方根函数，让扣分更平滑
-            const penaltyRatio = Math.min(Math.sqrt(excessRatio * 2), 1); // 平方根衰减
+            const excessRatio = excess / threshold; // Ratio exceeding threshold
+            // Use square root function for smoother penalty
+            const penaltyRatio = Math.min(Math.sqrt(excessRatio * 2), 1); // Square root decay
             return weight * (1 - penaltyRatio);
         }
     }
     
-    // 计算肩膀得分（优化的渐进式扣分）
+    // Calculate shoulder score (optimized progressive penalty)
     breakdown.shoulder = calculateProgressiveScore(metrics.shoulderTilt, thresholds.shoulder, weights.shoulder);
     score += breakdown.shoulder;
     
-    // 计算髋部得分
+    // Calculate hip score
     breakdown.hip = calculateProgressiveScore(metrics.hipTilt, thresholds.hip, weights.hip);
     score += breakdown.hip;
     
-    // 计算头部得分
+    // Calculate head score
     breakdown.head = calculateProgressiveScore(metrics.headTilt, thresholds.head, weights.head);
     score += breakdown.head;
     
-    // 计算脊柱弯曲度得分（使用优化的渐进式扣分）
+    // Calculate spinal curvature score (using optimized progressive penalty)
     if (hasSpinalData && thresholds.spinal) {
         breakdown.spinal = calculateProgressiveScore(metrics.spinalCurvature, thresholds.spinal, weights.spinal);
         score += breakdown.spinal;
     }
     
-    // 获取阈值配置
+    // Get threshold configuration
     const thresholdConfig = getCurrentThresholds();
     const scoreThreshold = thresholdConfig.weightedScoreThreshold;
     
@@ -139,61 +139,61 @@ function calculatePostureScoreFront(metrics, thresholds, isSCIMode = false) {
         score: score,
         isGood: score >= scoreThreshold,
         breakdown: breakdown,
-        percentage: Math.round(score * 100)  // 百分比形式
+        percentage: Math.round(score * 100)  // Percentage form
     };
 }
 
 /**
- * 改进的加权评分系统（侧面模式）
- * 结合颈部角度和躯干角度
- * @param {Object} metrics - 检测指标 {neckAngle, torsoAngle}
- * @param {Object} thresholds - 阈值配置 {neck, torso}
- * @param {boolean} isSCIMode - 是否为SCI模式
- * @returns {Object} 评分结果 {score, isGood, breakdown}
+ * Improved weighted scoring system (side view mode)
+ * Combines neck angle and torso angle
+ * @param {Object} metrics - Detection metrics {neckAngle, torsoAngle}
+ * @param {Object} thresholds - Threshold configuration {neck, torso}
+ * @param {boolean} isSCIMode - Whether in SCI mode
+ * @returns {Object} Scoring result {score, isGood, breakdown}
  */
 function calculatePostureScoreSide(metrics, thresholds, isSCIMode = false) {
     let score = 0.0;
     const breakdown = {};
     
-    // 权重配置
+    // Weight configuration
     const weights = isSCIMode ? {
-        neck: 0.45,   // SCI患者颈部问题更常见
-        torso: 0.55   // 躯干角度更重要
+        neck: 0.45,   // Neck problems more common in SCI patients
+        torso: 0.55   // Torso angle more important
     } : {
         neck: 0.50,
         torso: 0.50
     };
     
-    // 优化的渐进式扣分函数（角度模式）
+    // Optimized progressive penalty function (angle mode)
     function calculateAngleProgressiveScore(value, threshold, weight) {
         if (value < threshold) {
-            // 在阈值内：完全得分，但接近阈值时稍微扣分
+            // Within threshold: full score, but slight penalty near threshold
             const ratio = value / threshold;
-            const bonus = ratio < 0.75 ? 1.0 : 1.0 - ((ratio - 0.75) / 0.25) * 0.15; // 75%以下满分
+            const bonus = ratio < 0.75 ? 1.0 : 1.0 - ((ratio - 0.75) / 0.25) * 0.15; // Full score below 75%
             return weight * bonus;
         } else {
-            // 超过阈值：渐进式扣分（使用更平滑的曲线）
+            // Exceeds threshold: progressive penalty (using smoother curve)
             const excess = value - threshold;
             const excessRatio = excess / threshold;
-            // 使用平方根函数，让扣分更平滑
+            // Use square root function for smoother penalty
             const penaltyRatio = Math.min(Math.sqrt(excessRatio * 1.5), 1);
             return weight * (1 - penaltyRatio);
         }
     }
     
-    // 计算颈部得分（优化的渐进式扣分）
+    // Calculate neck score (optimized progressive penalty)
     breakdown.neck = calculateAngleProgressiveScore(metrics.neckAngle, thresholds.neck, weights.neck);
     score += breakdown.neck;
     
-    // 计算躯干得分
+    // Calculate torso score
     breakdown.torso = calculateAngleProgressiveScore(metrics.torsoAngle, thresholds.torso, weights.torso);
     score += breakdown.torso;
     
-    // 获取阈值配置
+    // Get threshold configuration
     const thresholdConfig = getCurrentThresholds();
-    // 对于侧视图，使用更严格的评分阈值（85%）以匹配Basic模式的严格性
-    // 评估结果显示：使用85%阈值可以达到96.36%准确率，接近Basic模式的96.88%
-    const scoreThreshold = isSCIMode ? 0.75 : 0.85;  // SCI模式稍宽松（75%），标准模式严格（85%）
+    // For side view, use stricter scoring threshold (85%) to match Basic mode strictness
+    // Evaluation results show: using 85% threshold achieves 96.36% accuracy, close to Basic mode's 96.88%
+    const scoreThreshold = isSCIMode ? 0.75 : 0.85;  // SCI mode slightly more lenient (75%), standard mode strict (85%)
     
     return {
         score: score,
@@ -204,13 +204,13 @@ function calculatePostureScoreSide(metrics, thresholds, isSCIMode = false) {
 }
 
 /**
- * 正面模式姿势分析
- * 检测肩膀高度差、髋部倾斜、头部倾斜等对称性问题
- * @param {Array} landmarks - MediaPipe 关键点数组
- * @param {number} canvasHeight - 画布高度
- * @param {number} shoulderThreshold - 肩膀高度差阈值（像素）
- * @param {number} headThreshold - 头部高度差阈值（像素）
- * @returns {Object} 分析结果 {shoulderTilt, hipTilt, headTilt, isGoodPosture, issues}
+ * Front view posture analysis
+ * Detects shoulder height difference, hip tilt, head tilt and other symmetry issues
+ * @param {Array} landmarks - MediaPipe landmarks array
+ * @param {number} canvasHeight - Canvas height
+ * @param {number} shoulderThreshold - Shoulder height difference threshold (pixels)
+ * @param {number} headThreshold - Head height difference threshold (pixels)
+ * @returns {Object} Analysis result {shoulderTilt, hipTilt, headTilt, isGoodPosture, issues}
  */
 function analyzeFrontPosture(landmarks, canvasHeight, shoulderThreshold = FRONT_SHOULDER_THRESHOLD_DEFAULT, headThreshold = FRONT_HEAD_THRESHOLD_DEFAULT) {
     const lShoulder = landmarks[POSE_LANDMARKS.LEFT_SHOULDER];
@@ -226,17 +226,17 @@ function analyzeFrontPosture(landmarks, canvasHeight, shoulderThreshold = FRONT_
             hipTilt: 0,
             headTilt: 0,
             isGoodPosture: false,
-            issues: ['关键点不可用']
+            issues: ['Landmarks unavailable']
         };
     }
     
     const lShoulderY = lShoulder.y * canvasHeight;
     const rShoulderY = rShoulder.y * canvasHeight;
     
-    // 1. 肩膀倾斜角度（高度差）
+    // 1. Shoulder tilt angle (height difference)
     const shoulderTilt = Math.abs(lShoulderY - rShoulderY);
     
-    // 2. 髋部倾斜角度
+    // 2. Hip tilt angle
     let hipTilt = 0;
     if (isLandmarkValid(lHip) && isLandmarkValid(rHip)) {
         const lHipY = lHip.y * canvasHeight;
@@ -244,7 +244,7 @@ function analyzeFrontPosture(landmarks, canvasHeight, shoulderThreshold = FRONT_
         hipTilt = Math.abs(lHipY - rHipY);
     }
     
-    // 3. 头部倾斜（使用耳朵）
+    // 3. Head tilt (using ears)
     let headTilt = 0;
     if (isLandmarkValid(lEar) && isLandmarkValid(rEar)) {
         const lEarY = lEar.y * canvasHeight;
@@ -252,26 +252,26 @@ function analyzeFrontPosture(landmarks, canvasHeight, shoulderThreshold = FRONT_
         headTilt = Math.abs(lEarY - rEarY);
     }
     
-    // 4. 脊柱弯曲度检测（新增：检测脊柱侧弯）
+    // 4. Spinal curvature detection (new: detect spinal lateral curvature)
     let spinalCurvature = 0;
     let spinalDirection = null;
     if (isLandmarkValid(lShoulder) && isLandmarkValid(rShoulder) && 
         isLandmarkValid(lHip) && isLandmarkValid(rHip)) {
-        // 计算肩膀中点和髋部中点的Y坐标
+        // Calculate midpoint Y coordinates of shoulders and hips
         const shoulderMidY = (lShoulderY + rShoulderY) / 2;
         const hipMidY = (lHip.y * canvasHeight + rHip.y * canvasHeight) / 2;
         
-        // 理想情况下，肩膀中点和髋部中点应该在一条垂直线上
-        // 计算偏差（脊柱弯曲度）
+        // Ideally, shoulder midpoint and hip midpoint should be on a vertical line
+        // Calculate deviation (spinal curvature)
         spinalCurvature = Math.abs(shoulderMidY - hipMidY);
         spinalDirection = shoulderMidY > hipMidY ? 'forward' : 'backward';
     }
     
-    // 获取当前阈值配置
+    // Get current threshold configuration
     const thresholds = getCurrentThresholds();
     const isSCIMode = currentThresholdMode !== 'standard';
     
-    // 使用改进的加权评分系统（包含脊柱弯曲度）
+    // Use improved weighted scoring system (including spinal curvature)
     const scoreResult = calculatePostureScoreFront({
         shoulderTilt,
         hipTilt,
@@ -281,96 +281,114 @@ function analyzeFrontPosture(landmarks, canvasHeight, shoulderThreshold = FRONT_
         shoulder: shoulderThreshold || thresholds.shoulder,
         hip: FRONT_HIP_THRESHOLD || thresholds.hip,
         head: headThreshold || thresholds.head,
-        spinal: 20  // 脊柱弯曲度阈值（像素）
+        spinal: 20  // Spinal curvature threshold (pixels)
     }, isSCIMode);
     
-    // 判定标准（使用加权评分）
+    // Judgment criteria (using weighted scoring)
     const isGoodPosture = scoreResult.isGood;
     
     const issues = [];
     let shoulderHigher = null; // 'left' or 'right'
     if (shoulderTilt > (shoulderThreshold || thresholds.shoulder)) {
         if (lShoulderY < rShoulderY) {
-            issues.push('左肩较高');
+            issues.push('Left shoulder higher');
             shoulderHigher = 'left';
         } else {
-            issues.push('右肩较高');
+            issues.push('Right shoulder higher');
             shoulderHigher = 'right';
         }
     }
     if (headTilt > (headThreshold || thresholds.head)) {
-        issues.push('头部倾斜');
+        issues.push('Head tilted');
     }
     if (hipTilt > (FRONT_HIP_THRESHOLD || thresholds.hip)) {
-        issues.push('髋部倾斜');
+        issues.push('Hip tilted');
     }
     if (spinalCurvature > 20) {
-        issues.push(spinalDirection === 'forward' ? '脊柱前倾' : '脊柱后倾');
+        issues.push(spinalDirection === 'forward' ? 'Spine forward lean' : 'Spine backward lean');
     }
     
     return {
         shoulderTilt,
         hipTilt,
         headTilt,
-        spinalCurvature,      // 新增：脊柱弯曲度
-        spinalDirection,     // 新增：脊柱方向
+        spinalCurvature,      // New: spinal curvature
+        spinalDirection,     // New: spinal direction
         isGoodPosture,
         issues,
         shoulderHigher,
-        score: scoreResult.score,        // 加权得分
-        scoreBreakdown: scoreResult.breakdown,  // 详细得分
-        scorePercentage: scoreResult.percentage  // 百分比
+        score: scoreResult.score,        // Weighted score
+        scoreBreakdown: scoreResult.breakdown,  // Detailed score
+        scorePercentage: scoreResult.percentage  // Percentage
     };
 }
 
-// 姿势建议生成函数
-function generatePostureSuggestions(analysis, viewMode, language = 'zh') {
+// Posture suggestion generation function
+function generatePostureSuggestions(analysis, viewMode, language = 'en') {
     const suggestions = [];
     
     if (viewMode === 'side' && analysis) {
         const { neckAngle, torsoAngle } = analysis;
         
-        // 颈部建议
+        // Neck suggestions
         if (neckAngle >= NECK_ANGLE_SEVERE) {
-            suggestions.push(i18n[language].suggestionsNeck.severe);
+            suggestions.push(language === 'en' ? 
+                'Severe neck forward tilt detected. Please adjust your screen height and sit upright.' :
+                '严重颈部前倾。请调整屏幕高度，坐直。');
         } else if (neckAngle >= NECK_ANGLE_MODERATE) {
-            suggestions.push(i18n[language].suggestionsNeck.moderate);
+            suggestions.push(language === 'en' ? 
+                'Moderate neck forward tilt. Try to keep your head aligned with your spine.' :
+                '中度颈部前倾。尽量保持头部与脊柱对齐。');
         } else if (neckAngle >= NECK_ANGLE_MILD) {
-            suggestions.push(i18n[language].suggestionsNeck.mild);
+            suggestions.push(language === 'en' ? 
+                'Slight neck forward tilt. Be mindful of your head position.' :
+                '轻微颈部前倾。注意头部位置。');
         }
         
-        // 躯干建议
+        // Torso suggestions
         if (torsoAngle >= TORSO_ANGLE_SEVERE) {
-            suggestions.push(i18n[language].suggestionsTorso.severe);
+            suggestions.push(language === 'en' ? 
+                'Severe torso forward lean. Sit back in your chair and use back support.' :
+                '严重躯干前倾。请靠回椅背，使用背部支撑。');
         } else if (torsoAngle >= TORSO_ANGLE_MODERATE) {
-            suggestions.push(i18n[language].suggestionsTorso.moderate);
+            suggestions.push(language === 'en' ? 
+                'Moderate torso forward lean. Adjust your sitting position.' :
+                '中度躯干前倾。调整坐姿。');
         } else if (torsoAngle >= TORSO_ANGLE_MILD) {
-            suggestions.push(i18n[language].suggestionsTorso.mild);
+            suggestions.push(language === 'en' ? 
+                'Slight torso forward lean. Try to sit more upright.' :
+                '轻微躯干前倾。尝试坐得更直。');
         }
     } else if (viewMode === 'front' && analysis) {
         const { shoulderTilt, headTilt, shoulderHigher } = analysis;
         
-        // 肩膀建议
+        // Shoulder suggestions
         if (shoulderTilt > 0 && shoulderHigher) {
             if (shoulderHigher === 'left') {
-                suggestions.push(i18n[language].suggestionsShoulder.left);
+                suggestions.push(language === 'en' ? 
+                    'Left shoulder is higher. Try to level your shoulders.' :
+                    '左肩较高。尝试让肩膀水平。');
             } else {
-                suggestions.push(i18n[language].suggestionsShoulder.right);
+                suggestions.push(language === 'en' ? 
+                    'Right shoulder is higher. Try to level your shoulders.' :
+                    '右肩较高。尝试让肩膀水平。');
             }
         }
         
-        // 头部建议
+        // Head suggestions
         if (headTilt > 0) {
-            suggestions.push(i18n[language].suggestionsHead);
+            suggestions.push(language === 'en' ? 
+                'Head is tilted. Keep your head centered and level.' :
+                '头部倾斜。保持头部居中和水平。');
         }
     }
     
     return suggestions;
 }
 
-// ========== Phase 2 优化：多关键点融合 + 高精度角度计算 ==========
+// ========== Phase 2 Optimization: Multi-keypoint fusion + High-precision angle calculation ==========
 /**
- * 计算中位数（抗异常值）
+ * Calculate median (resistant to outliers)
  */
 function median(arr) {
     if (arr.length === 0) return 0;
@@ -383,13 +401,13 @@ function median(arr) {
 }
 
 /**
- * 多关键点融合角度计算（提高鲁棒性）
+ * Multi-keypoint fusion angle calculation (improve robustness)
  */
 function calculateAngleWithFusion(landmarks, canvasWidth, canvasHeight, angleType) {
     const angles = [];
     
     if (angleType === 'neck') {
-        // 方法1: 左肩-左耳
+        // Method 1: Left shoulder - Left ear
         const lShoulder = landmarks[POSE_LANDMARKS.LEFT_SHOULDER];
         const lEar = landmarks[POSE_LANDMARKS.LEFT_EAR];
         if (isLandmarkValid(lShoulder) && isLandmarkValid(lEar)) {
@@ -400,7 +418,7 @@ function calculateAngleWithFusion(landmarks, canvasWidth, canvasHeight, angleTyp
             if (angle > 0) angles.push(angle);
         }
         
-        // 方法2: 右肩-右耳（如果可见）
+        // Method 2: Right shoulder - Right ear (if visible)
         const rShoulder = landmarks[POSE_LANDMARKS.RIGHT_SHOULDER];
         const rEar = landmarks[POSE_LANDMARKS.RIGHT_EAR];
         if (isLandmarkValid(rShoulder) && isLandmarkValid(rEar)) {
@@ -411,7 +429,7 @@ function calculateAngleWithFusion(landmarks, canvasWidth, canvasHeight, angleTyp
             if (angle > 0) angles.push(angle);
         }
         
-        // 方法3: 左肩-鼻子（备用）
+        // Method 3: Left shoulder - Nose (backup)
         const nose = landmarks[POSE_LANDMARKS.NOSE];
         if (isLandmarkValid(lShoulder) && isLandmarkValid(nose)) {
             const shoulder = { x: lShoulder.x * canvasWidth, y: lShoulder.y * canvasHeight };
@@ -421,7 +439,7 @@ function calculateAngleWithFusion(landmarks, canvasWidth, canvasHeight, angleTyp
             if (angle > 0) angles.push(angle);
         }
     } else if (angleType === 'torso') {
-        // 方法1: 左髋-左肩
+        // Method 1: Left hip - Left shoulder
         const lHip = landmarks[POSE_LANDMARKS.LEFT_HIP];
         const lShoulder = landmarks[POSE_LANDMARKS.LEFT_SHOULDER];
         if (isLandmarkValid(lHip) && isLandmarkValid(lShoulder)) {
@@ -434,7 +452,7 @@ function calculateAngleWithFusion(landmarks, canvasWidth, canvasHeight, angleTyp
             }
         }
         
-        // 方法2: 右髋-右肩（如果可见）
+        // Method 2: Right hip - Right shoulder (if visible)
         const rHip = landmarks[POSE_LANDMARKS.RIGHT_HIP];
         const rShoulder = landmarks[POSE_LANDMARKS.RIGHT_SHOULDER];
         if (isLandmarkValid(rHip) && isLandmarkValid(rShoulder)) {
@@ -448,36 +466,36 @@ function calculateAngleWithFusion(landmarks, canvasWidth, canvasHeight, angleTyp
         }
     }
     
-    // 返回中位数（抗异常值）
+    // Return median (resistant to outliers)
     return median(angles);
 }
 
-// ========== Phase 1 优化：侧面检测算法（使用高精度角度计算）==========
+// ========== Phase 1 Optimization: Side view detection algorithm (using high-precision angle calculation) ==========
 function analyzeSidePosture(landmarks, canvasWidth, canvasHeight) {
     const lShoulder = landmarks[POSE_LANDMARKS.LEFT_SHOULDER];
     const lEar = landmarks[POSE_LANDMARKS.LEFT_EAR];
     const lHip = landmarks[POSE_LANDMARKS.LEFT_HIP];
     
-    // 基础检查
+    // Basic check
     if (!isLandmarkValid(lShoulder) || !isLandmarkValid(lEar) || !isLandmarkValid(lHip)) {
         return {
             neckAngle: 0,
             torsoAngle: 0,
             isGoodPosture: false,
-            issues: ['关键点不可用']
+            issues: ['Landmarks unavailable']
         };
     }
     
-    // ========== Phase 2: 使用多关键点融合计算角度 ==========
+    // ========== Phase 2: Use multi-keypoint fusion to calculate angles ==========
     let neckAngle = 0;
     let torsoAngle = 0;
     
     try {
-        // 多关键点融合计算（提高鲁棒性，抗异常值）
+        // Multi-keypoint fusion calculation (improve robustness, resistant to outliers)
         neckAngle = calculateAngleWithFusion(landmarks, canvasWidth, canvasHeight, 'neck');
         torsoAngle = calculateAngleWithFusion(landmarks, canvasWidth, canvasHeight, 'torso');
         
-        // 如果融合失败，回退到单点计算
+        // If fusion fails, fallback to single-point calculation
         if (neckAngle === 0) {
             const shoulder = { x: lShoulder.x * canvasWidth, y: lShoulder.y * canvasHeight };
             const ear = { x: lEar.x * canvasWidth, y: lEar.y * canvasHeight };
@@ -494,14 +512,14 @@ function analyzeSidePosture(landmarks, canvasWidth, canvasHeight) {
             }
         }
     } catch (error) {
-        console.warn('角度计算失败', error);
+        console.warn('Angle calculation failed', error);
     }
     
-    // 获取当前阈值配置（使用SCI阈值系统）
+    // Get current threshold configuration (using SCI threshold system)
     const thresholds = getCurrentThresholds();
     const isSCIMode = currentThresholdMode !== 'standard';
     
-    // 使用改进的加权评分系统（而不是简单的阈值判断）
+    // Use improved weighted scoring system (instead of simple threshold judgment)
     const scoreResult = calculatePostureScoreSide({
         neckAngle,
         torsoAngle
@@ -510,15 +528,15 @@ function analyzeSidePosture(landmarks, canvasWidth, canvasHeight) {
         torso: thresholds.torso
     }, isSCIMode);
     
-    // 判定标准（使用加权评分）
+    // Judgment criteria (using weighted scoring)
     const isGoodPosture = scoreResult.isGood;
     
     const issues = [];
     if (neckAngle >= thresholds.neck) {
-        issues.push('颈部前倾');
+        issues.push('Neck forward tilt');
     }
     if (torsoAngle >= thresholds.torso) {
-        issues.push('躯干前倾');
+        issues.push('Torso forward lean');
     }
     
     return {
@@ -526,13 +544,13 @@ function analyzeSidePosture(landmarks, canvasWidth, canvasHeight) {
         torsoAngle,
         isGoodPosture,
         issues,
-        score: scoreResult.score,        // 加权得分
-        scoreBreakdown: scoreResult.breakdown,  // 详细得分
-        scorePercentage: scoreResult.percentage  // 百分比
+        score: scoreResult.score,        // Weighted score
+        scoreBreakdown: scoreResult.breakdown,  // Detailed score
+        scorePercentage: scoreResult.percentage  // Percentage
     };
 }
 
-// 导出所有函数到全局作用域
+// Export all functions to global scope
 window.detectViewAngle = detectViewAngle;
 window.calculatePostureScoreFront = calculatePostureScoreFront;
 window.calculatePostureScoreSide = calculatePostureScoreSide;
