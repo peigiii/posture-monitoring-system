@@ -56,6 +56,7 @@
             const [badTime, setBadTime] = useState(0);
             const [viewMode, setViewMode] = useState('side');
             const [thresholdMode, setThresholdMode] = useState('standard');
+            const [currentThresholds, setCurrentThresholds] = useState({ neck: 40, torso: 15 });
             
             // Refs
             const videoRef = useRef(null);
@@ -63,6 +64,14 @@
             const poseRef = useRef(null);
             const cameraRef = useRef(null);
             const timerRef = useRef(null);
+            
+            // Update thresholds when mode changes
+            useEffect(() => {
+                if (window.getCurrentThresholds) {
+                    const thresholds = window.getCurrentThresholds();
+                    setCurrentThresholds(thresholds);
+                }
+            }, [thresholdMode]);
             
             // Initialize MediaPipe Pose
             useEffect(() => {
@@ -262,7 +271,13 @@
                                         
                                         <select
                                             value={thresholdMode}
-                                            onChange={(e) => setThresholdMode(e.target.value)}
+                                            onChange={(e) => {
+                                                const newMode = e.target.value;
+                                                setThresholdMode(newMode);
+                                                if (window.setThresholdMode) {
+                                                    window.setThresholdMode(newMode);
+                                                }
+                                            }}
                                             className="px-4 py-2 border border-gray-300 rounded-lg"
                                         >
                                             <option value="standard">Standard Mode</option>
@@ -282,12 +297,12 @@
                                         <div>
                                             <div className="flex justify-between mb-1">
                                                 <span className="text-gray-600">Neck Angle</span>
-                                                <span className="font-bold">{neckAngle.toFixed(1)}°</span>
+                                                <span className="font-bold">{neckAngle.toFixed(1)}° / {currentThresholds.neck}°</span>
                                             </div>
                                             <div className="w-full bg-gray-200 rounded-full h-2">
                                                 <div 
-                                                    className={`h-2 rounded-full ${neckAngle < 40 ? 'bg-green-500' : 'bg-red-500'}`}
-                                                    style={{ width: `${Math.min((neckAngle / 60) * 100, 100)}%` }}
+                                                    className={`h-2 rounded-full ${neckAngle < currentThresholds.neck ? 'bg-green-500' : 'bg-red-500'}`}
+                                                    style={{ width: `${Math.min((neckAngle / (currentThresholds.neck * 1.2)) * 100, 100)}%` }}
                                                 ></div>
                                             </div>
                                         </div>
@@ -295,12 +310,12 @@
                                         <div>
                                             <div className="flex justify-between mb-1">
                                                 <span className="text-gray-600">Torso Angle</span>
-                                                <span className="font-bold">{torsoAngle.toFixed(1)}°</span>
+                                                <span className="font-bold">{torsoAngle.toFixed(1)}° / {currentThresholds.torso}°</span>
                                             </div>
                                             <div className="w-full bg-gray-200 rounded-full h-2">
                                                 <div 
-                                                    className={`h-2 rounded-full ${torsoAngle < 15 ? 'bg-green-500' : 'bg-red-500'}`}
-                                                    style={{ width: `${Math.min((torsoAngle / 30) * 100, 100)}%` }}
+                                                    className={`h-2 rounded-full ${torsoAngle < currentThresholds.torso ? 'bg-green-500' : 'bg-red-500'}`}
+                                                    style={{ width: `${Math.min((torsoAngle / (currentThresholds.torso * 1.5)) * 100, 100)}%` }}
                                                 ></div>
                                             </div>
                                         </div>
