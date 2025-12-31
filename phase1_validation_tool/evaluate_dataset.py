@@ -3,13 +3,7 @@ Dataset Evaluation Script
 Evaluate posture detection algorithm performance on dataset
 
 Usage:
-    python evaluate_dataset.py
-    python evaluate_dataset.py --basic          # Use basic detection mode
-    python evaluate_dataset.py --enhanced       # Use enhanced detection mode
-    python evaluate_dataset.py --sci-relaxed    # Use SCI relaxed thresholds
-    python evaluate_dataset.py --sci-strict     # Use SCI strict thresholds
-    python evaluate_dataset.py --compare        # Compare basic vs enhanced
-    python evaluate_dataset.py --comprehensive  # Generate full report
+    python evaluation/evaluate_dataset.py
 """
 
 import cv2
@@ -20,16 +14,16 @@ from pathlib import Path
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix, classification_report
 import numpy as np
 
-# MediaPipe initialization
+# MediaPipe 初始化
 mp_pose = mp.solutions.pose
 pose = mp_pose.Pose(static_image_mode=True)
 
-# Threshold settings (consistent with main program)
+# 阈值设置（与主程序保持一致）
 DEFAULT_NECK_THRESHOLD = 40
 DEFAULT_TORSO_THRESHOLD = 15
-ALIGNMENT_THRESHOLD = 100  # Side view alignment threshold
+ALIGNMENT_THRESHOLD = 100  # 侧面对齐阈值
 
-# SCI patient-specific threshold configuration system (consistent with website)
+# SCI患者专用阈值配置系统（与网站保持一致）
 SCI_THRESHOLDS = {
     'standard': {
         'neck': 40,
@@ -37,7 +31,7 @@ SCI_THRESHOLDS = {
         'shoulder': 30,
         'hip': 25,
         'head': 25,
-        'spinal': 20,  # Spinal curvature threshold
+        'spinal': 20,  # 脊柱弯曲度阈值
         'weighted_score_threshold': 0.70
     },
     'sciRelaxed': {
@@ -60,24 +54,24 @@ SCI_THRESHOLDS = {
     }
 }
 
-# Current threshold mode in use
+# 当前使用的阈值模式
 CURRENT_THRESHOLD_MODE = 'standard'  # 'standard' | 'sciRelaxed' | 'sciStrict'
 
-# Use weighted scoring instead of "all must pass"
-USE_WEIGHTED_SCORING = True  # Use weighted scoring (more reasonable)
+# 使用加权评分而不是"全部通过"
+USE_WEIGHTED_SCORING = True      # 使用加权评分（更合理）
 
-# Backward compatibility thresholds (using standard mode)
+# 兼容旧代码的阈值（使用标准模式）
 SHOULDER_HEIGHT_THRESHOLD = SCI_THRESHOLDS[CURRENT_THRESHOLD_MODE]['shoulder']
 HIP_HEIGHT_THRESHOLD = SCI_THRESHOLDS[CURRENT_THRESHOLD_MODE]['hip']
 HEAD_TILT_THRESHOLD = SCI_THRESHOLDS[CURRENT_THRESHOLD_MODE]['head']
 WEIGHTED_SCORE_THRESHOLD = SCI_THRESHOLDS[CURRENT_THRESHOLD_MODE]['weighted_score_threshold']
 
 def findDistance(x1, y1, x2, y2):
-    """Calculate distance between two points"""
+    """计算两点距离"""
     return m.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
 
 def findAngle(x1, y1, x2, y2):
-    """Calculate angle (consistent with main program)"""
+    """计算角度（与主程序保持一致）"""
     try:
         denominator = m.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2) * y1
         if abs(denominator) < 0.0001:
@@ -92,16 +86,16 @@ def findAngle(x1, y1, x2, y2):
 
 def calculate_progressive_score(value, threshold, weight):
     """
-    Optimized progressive penalty function (using smoother curve)
-    Consistent with website algorithm
+    优化的渐进式扣分函数（使用更平滑的曲线）
+    与网站算法保持一致
     """
     if value < threshold:
-        # Within threshold: full score, but slight penalty near threshold
+        # 在阈值内：完全得分，但接近阈值时稍微扣分
         ratio = value / threshold
         bonus = 1.0 if ratio < 0.7 else 1.0 - ((ratio - 0.7) / 0.3) * 0.1
         return weight * bonus
     else:
-        # Exceeds threshold: progressive penalty (using square root decay)
+        # 超过阈值：渐进式扣分（使用平方根衰减）
         excess = value - threshold
         excess_ratio = excess / threshold
         penalty_ratio = min(m.sqrt(excess_ratio * 2), 1.0)
@@ -109,7 +103,7 @@ def calculate_progressive_score(value, threshold, weight):
 
 def calculate_angle_progressive_score(value, threshold, weight):
     """
-    Progressive penalty function for angle mode
+    角度模式的渐进式扣分函数
     """
     if value < threshold:
         ratio = value / threshold
@@ -123,13 +117,13 @@ def calculate_angle_progressive_score(value, threshold, weight):
 
 def calculate_posture_score_front(metrics, thresholds, is_sci_mode=False):
     """
-    Improved weighted scoring system (front view mode)
-    Consistent with website algorithm
+    改进的加权评分系统（正面模式）
+    与网站算法保持一致
     """
     score = 0.0
     breakdown = {}
     
-    # Adjust weights based on mode
+    # 根据模式调整权重
     if is_sci_mode:
         weights = {
             'shoulder': 0.30,
@@ -145,7 +139,7 @@ def calculate_posture_score_front(metrics, thresholds, is_sci_mode=False):
             'spinal': 0.15
         }
     
-    # If no spinal data, redistribute weights
+    # 如果没有脊柱数据，重新分配权重
     has_spinal = 'spinal_curvature' in metrics and metrics['spinal_curvature'] is not None
     if not has_spinal:
         total = weights['shoulder'] + weights['hip'] + weights['head']
@@ -154,7 +148,7 @@ def calculate_posture_score_front(metrics, thresholds, is_sci_mode=False):
         weights['head'] = weights['head'] / total
         weights['spinal'] = 0
     
-    # Calculate individual scores
+    # 计算各项得分
     breakdown['shoulder'] = calculate_progressive_score(
         metrics['shoulder_height_diff'], thresholds['shoulder'], weights['shoulder']
     )
@@ -185,19 +179,19 @@ def calculate_posture_score_front(metrics, thresholds, is_sci_mode=False):
 
 def calculate_posture_score_side(metrics, thresholds, is_sci_mode=False):
     """
-    Improved weighted scoring system (side view mode)
-    Consistent with website algorithm
+    改进的加权评分系统（侧面模式）
+    与网站算法保持一致
     """
     score = 0.0
     breakdown = {}
     
-    # Weight configuration
+    # 权重配置
     if is_sci_mode:
         weights = {'neck': 0.45, 'torso': 0.55}
     else:
         weights = {'neck': 0.50, 'torso': 0.50}
     
-    # Calculate scores
+    # 计算得分
     breakdown['neck'] = calculate_angle_progressive_score(
         metrics['neck_angle'], thresholds['neck'], weights['neck']
     )
@@ -218,13 +212,11 @@ def calculate_posture_score_side(metrics, thresholds, is_sci_mode=False):
 
 def analyze_image(image_path, use_enhanced_detection=True, detect_view=False, threshold_mode=None):
     """
-    Analyze a single image and return posture detection results (enhanced version with multiple metrics)
+    分析单张图像，返回姿势检测结果（增强版：包含多个检测指标）
     
     Args:
-        image_path: Image file path
-        use_enhanced_detection: Whether to use enhanced detection (multiple metrics)
-        detect_view: Whether to detect view type
-        threshold_mode: Threshold mode to use
+        image_path: 图像路径
+        use_enhanced_detection: 是否使用增强检测（多指标）
     
     Returns:
         dict: {
@@ -235,22 +227,22 @@ def analyze_image(image_path, use_enhanced_detection=True, detect_view=False, th
             'head_tilt': float,
             'is_aligned': bool,
             'predicted_label': str,  # 'good' or 'bad'
-            'predicted_label_basic': str,  # Basic version (only considers two angles)
+            'predicted_label_basic': str,  # 基础版本（只考虑两个角度）
             'landmarks_detected': bool,
-            'issues': list  # List of detected issues
+            'issues': list  # 检测到的问题列表
         }
     """
-    # Read image
+    # 读取图像
     image = cv2.imread(str(image_path))
     if image is None:
         return None
     
     h, w = image.shape[:2]
     
-    # Convert to RGB
+    # 转换为 RGB
     image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     
-    # Process image
+    # 处理图像
     results = pose.process(image_rgb)
     
     if results.pose_landmarks is None:
@@ -270,7 +262,7 @@ def analyze_image(image_path, use_enhanced_detection=True, detect_view=False, th
     lm = results.pose_landmarks
     lmPose = mp_pose.PoseLandmark
     
-    # Get keypoint coordinates
+    # 获取关键点坐标
     try:
         l_shldr_x = int(lm.landmark[lmPose.LEFT_SHOULDER].x * w)
         l_shldr_y = int(lm.landmark[lmPose.LEFT_SHOULDER].y * h)
@@ -298,11 +290,11 @@ def analyze_image(image_path, use_enhanced_detection=True, detect_view=False, th
             'issues': ['landmarks_error']
         }
     
-    # Calculate alignment distance
+    # 计算对齐距离
     offset = findDistance(l_shldr_x, l_shldr_y, r_shldr_x, r_shldr_y)
-    is_aligned = offset < ALIGNMENT_THRESHOLD  # True=side view, False=front view
+    is_aligned = offset < ALIGNMENT_THRESHOLD  # True=侧面对齐, False=正面对齐
     
-    # Calculate angles (basic detection)
+    # 计算角度（基础检测）
     try:
         neck_angle = findAngle(l_shldr_x, l_shldr_y, l_ear_x, l_ear_y)
         torso_angle = findAngle(l_hip_x, l_hip_y, l_shldr_x, l_shldr_y)
@@ -310,26 +302,26 @@ def analyze_image(image_path, use_enhanced_detection=True, detect_view=False, th
         neck_angle = 0
         torso_angle = 0
     
-    # Basic judgment (only considers two angles)
+    # 基础判定（只考虑两个角度）
     is_good_basic = neck_angle < DEFAULT_NECK_THRESHOLD and torso_angle < DEFAULT_TORSO_THRESHOLD
     
-    # Get current threshold configuration
+    # 获取当前阈值配置
     if threshold_mode is None:
         threshold_mode = CURRENT_THRESHOLD_MODE
     thresholds = SCI_THRESHOLDS.get(threshold_mode, SCI_THRESHOLDS['standard'])
     is_sci_mode = threshold_mode != 'standard'
     
-    # Enhanced detection (multiple metrics)
+    # 增强检测（多指标）
     shoulder_height_diff = abs(l_shldr_y - r_shldr_y)
     hip_height_diff = abs(l_hip_y - r_hip_y)
     head_tilt = abs(l_ear_y - r_ear_y)
     
-    # Spinal curvature detection (new)
-    # Note: For side view, spinal curvature detection may be inaccurate as side view mainly shows forward/backward tilt
-    # Only use spinal curvature detection for front view
+    # 脊柱弯曲度检测（新增）
+    # 注意：对于侧视图，脊柱弯曲度检测可能不准确，因为侧视图主要看前后倾斜
+    # 只在正面对齐时使用脊柱弯曲度检测
     spinal_curvature = 0
     spinal_direction = None
-    use_spinal_detection = not is_aligned  # Use for front view (is_aligned=False means front view)
+    use_spinal_detection = not is_aligned  # 正面对齐时使用（is_aligned=False表示正面）
     
     if use_spinal_detection:
         try:
@@ -340,18 +332,18 @@ def analyze_image(image_path, use_enhanced_detection=True, detect_view=False, th
         except:
             pass
     
-    # Comprehensive judgment (enhanced version)
-    # Important: For side view, mainly detect angles; for front view, detect symmetry
+    # 综合判定（增强版）
+    # 重要：对于侧视图，主要检测角度；对于正视图，检测对称性
     issues = []
     
-    # Angle detection (applicable to both side and front views)
+    # 角度检测（侧视图和正视图都适用）
     if neck_angle >= thresholds['neck']:
         issues.append('neck_forward')
     if torso_angle >= thresholds['torso']:
         issues.append('torso_forward')
     
-    # Symmetry detection (only use for front view, inaccurate for side view)
-    if not is_aligned:  # Detect symmetry for front view
+    # 对称性检测（只在正视图时使用，侧视图不准确）
+    if not is_aligned:  # 正面对齐时检测对称性
         if shoulder_height_diff >= thresholds['shoulder']:
             issues.append('shoulder_tilt')
         if hip_height_diff >= thresholds['hip']:
@@ -361,23 +353,23 @@ def analyze_image(image_path, use_enhanced_detection=True, detect_view=False, th
         if use_spinal_detection and spinal_curvature >= thresholds['spinal']:
             issues.append('spinal_curvature')
     
-    # Enhanced judgment: Use improved weighted scoring system
+    # 增强判定：使用改进的加权评分系统
     if USE_WEIGHTED_SCORING:
-        # Use new progressive scoring algorithm
-        # Important: For side view dataset, mainly use angle detection, symmetry detection is inaccurate
-        if is_aligned:  # Side view, use side scoring (only consider angles)
+        # 使用新的渐进式评分算法
+        # 重要：对于侧视图数据集，主要使用角度检测，对称性检测不准确
+        if is_aligned:  # 侧面对齐，使用侧面评分（只考虑角度）
             score_result = calculate_posture_score_side(
                 {'neck_angle': neck_angle, 'torso_angle': torso_angle},
                 {'neck': thresholds['neck'], 'torso': thresholds['torso']},
                 is_sci_mode
             )
-            # For side view dataset, use stricter scoring threshold (0.85) to match Basic mode strictness
-            # Basic mode requires: neck < 40 AND torso < 15 (all must pass)
-            # Enhanced mode uses weighted scoring, but to match Basic strictness, use higher threshold
-            strict_threshold = 0.85 if not is_sci_mode else 0.75  # SCI mode slightly more lenient
+            # 对于侧视图数据集，使用更严格的评分阈值（0.85）以匹配Basic模式的严格性
+            # Basic模式要求：neck < 40 AND torso < 15（全部通过）
+            # Enhanced模式使用加权评分，但为了匹配Basic的严格性，使用更高的阈值
+            strict_threshold = 0.85 if not is_sci_mode else 0.75  # SCI模式稍宽松
             is_good_enhanced = score_result['score'] >= strict_threshold
-        else:  # Front view, use front scoring (consider symmetry)
-            # For front view, use symmetry detection
+        else:  # 正面对齐，使用正面评分（考虑对称性）
+            # 对于正视图，使用对称性检测
             spinal_metric = spinal_curvature if use_spinal_detection else None
             spinal_threshold = thresholds['spinal'] if use_spinal_detection else None
             
@@ -398,11 +390,11 @@ def analyze_image(image_path, use_enhanced_detection=True, detect_view=False, th
             )
             is_good_enhanced = score_result['is_good']
     else:
-        # All must pass to be considered good (strict mode)
+        # 全部通过才算良好（严格模式）
         is_good_enhanced = len(issues) == 0
         score_result = {'score': 0, 'percentage': 0, 'breakdown': {}}
     
-    # Choose which judgment result to use
+    # 选择使用哪个判定结果
     if use_enhanced_detection:
         predicted_label = 'good' if is_good_enhanced else 'bad'
     else:
@@ -428,14 +420,13 @@ def analyze_image(image_path, use_enhanced_detection=True, detect_view=False, th
 
 def evaluate_dataset(data_dir='data', use_enhanced_detection=True, return_results=False, filter_view=None, threshold_mode='standard'):
     """
-    Evaluate entire dataset (supports both basic and enhanced detection)
+    评估整个数据集（支持基础版和增强版检测）
     
     Args:
-        data_dir: Dataset root directory
-        use_enhanced_detection: Whether to use enhanced detection (multiple metrics)
-        return_results: Whether to return results dictionary (for comprehensive report)
-        filter_view: Filter view type ('side', 'front', None=all)
-        threshold_mode: Threshold mode to use
+        data_dir: 数据集根目录
+        use_enhanced_detection: 是否使用增强检测（多指标）
+        return_results: 是否返回结果字典（用于综合报告）
+        filter_view: 过滤视角类型 ('side', 'front', None=全部)
     """
     data_path = Path(data_dir)
     good_dir = data_path / 'good_posture'
@@ -452,18 +443,18 @@ def evaluate_dataset(data_dir='data', use_enhanced_detection=True, return_result
         print("Please create data/bad_posture/ directory and add bad posture images")
         return
     
-    # Get all image files (supports nested folder structure)
+    # 获取所有图像文件（支持嵌套文件夹结构）
     image_extensions = ['.jpg', '.jpeg', '.png', '.bmp']
     
-    # Recursively find all image files (supports subfolders)
+    # 递归查找所有图像文件（支持子文件夹）
     def find_all_images(directory):
-        """Recursively find all image files in directory"""
+        """递归查找目录下所有图像文件"""
         images = []
         for item in directory.iterdir():
             if item.is_file() and item.suffix.lower() in image_extensions:
                 images.append(item)
             elif item.is_dir():
-                # Recursively search subfolders
+                # 递归查找子文件夹
                 images.extend(find_all_images(item))
         return images
     
@@ -538,7 +529,7 @@ def evaluate_dataset(data_dir='data', use_enhanced_detection=True, return_result
     for img_path in bad_images:
         result = analyze_image(img_path, use_enhanced_detection, detect_view=(filter_view is not None), threshold_mode=threshold_mode)
         
-        # If view filter specified, skip images that don't match
+        # 如果指定了视角过滤，跳过不符合的图像
         if filter_view and result and result.get('view_type') != filter_view:
             continue
         if result and result['landmarks_detected']:
@@ -661,7 +652,7 @@ def evaluate_dataset(data_dir='data', use_enhanced_detection=True, return_result
             for issue, count in sorted(issue_counts.items(), key=lambda x: x[1], reverse=True):
                 print(f"  {issue}: {count} images")
         
-        # Display score statistics
+        # 显示评分统计
         if results and any(r.get('score_percentage') is not None for r in results):
             scores = [r.get('score_percentage', 0) for r in results if r.get('score_percentage') is not None]
             if scores:
@@ -691,7 +682,7 @@ def evaluate_dataset(data_dir='data', use_enhanced_detection=True, return_result
     print("Evaluation Complete! ✓")
     print("="*70)
     
-    # Quick summary at the end
+    # Quick summary at the end (optional, can be removed if too verbose)
     print(f"\n📊 Quick Summary:")
     print(f"   Total Samples: {total_samples}")
     print(f"   Overall Accuracy: {accuracy*100:.2f}%")
@@ -717,7 +708,7 @@ def evaluate_dataset(data_dir='data', use_enhanced_detection=True, return_result
 
 def generate_comprehensive_report():
     """
-    Generate comprehensive report: Run both basic and enhanced detection, and generate merged report
+    生成综合报告：同时运行基础检测和增强检测，并生成合并报告
     """
     print("="*70)
     print("COMPREHENSIVE EVALUATION REPORT")

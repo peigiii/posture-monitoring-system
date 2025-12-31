@@ -61,11 +61,6 @@
     --min-touch-target: 48px; /* WCAG 2.1 最小触摸目标 */
 }
 
-html {
-    height: 100%;
-    overflow-x: hidden; /* 防止横向滚动 */
-}
-
 body {
     margin: 0;
     padding: 0;
@@ -74,9 +69,6 @@ body {
     color: var(--text-primary);
     /* 使用CSS变量作为基础字体大小，支持动态缩放 */
     font-size: var(--font-body, 16px);
-    height: 100%;
-    overflow-x: hidden; /* 防止横向滚动 */
-    -webkit-overflow-scrolling: touch; /* iOS平滑滚动 */
 }
 
 /* 确保所有文本元素继承字体大小缩放 */
@@ -91,17 +83,6 @@ body {
 #root {
     width: 100%;
     height: 100vh;
-    overflow-x: hidden; /* 防止横向滚动 */
-    position: relative;
-}
-
-/* 移动端根元素优化 */
-@media (max-width: 768px) {
-    #root {
-        height: 100vh;
-        height: -webkit-fill-available; /* iOS Safari 支持 */
-        overflow-x: hidden;
-    }
 }
 @keyframes slideIn {
     from {
@@ -871,68 +852,13 @@ textarea:focus-visible {
 }
 
 /* 响应式设计 - Responsive Design */
-/* 移动端适配 - Mobile Responsive Design */
 @media (max-width: 768px) {
-    /* 主布局改为竖向 */
     .main-layout {
-        flex-direction: column !important;
+        flex-direction: column;
     }
-    
-    /* 视频容器全宽 */
     .video-container {
-        width: 100% !important;
-        max-width: 100% !important;
-        aspect-ratio: 9/16 !important; /* 手机竖屏比例 */
-        margin: 0 auto !important;
+        width: 100%;
     }
-    
-    /* 视频画布在移动端优化 */
-    .video-container canvas {
-        width: 100% !important;
-        height: auto !important;
-        object-fit: contain !important;
-    }
-    
-    /* 左侧视频区域在手机上全宽 */
-    .video-section {
-        flex: 1 1 auto !important;
-        width: 100% !important;
-        max-width: 100% !important;
-        padding: var(--space-sm) !important;
-        min-height: 0 !important;
-    }
-    
-    /* 右侧面板在手机上全宽，放在视频下方 */
-    .control-panel {
-        flex: 1 1 auto !important;
-        width: 100% !important;
-        max-width: 100% !important;
-        padding: var(--space-sm) !important;
-        order: 2 !important; /* 确保在视频下方 */
-        position: relative !important;
-        max-height: none !important;
-    }
-    
-    /* Header 在手机上优化 */
-    header[role="banner"] {
-        flex-wrap: wrap !important;
-        padding: var(--space-xs) !important;
-    }
-    
-    header[role="banner"] > div:last-child {
-        flex-wrap: wrap !important;
-        gap: var(--space-xs) !important;
-    }
-    
-    /* Header 按钮在手机上缩小 */
-    header[role="banner"] button {
-        padding: var(--space-xs) !important;
-        font-size: var(--font-body-small) !important;
-        min-width: auto !important;
-        min-height: 36px !important;
-    }
-    
-    /* 控制面板在手机上优化 */
     .control-panel {
         position: fixed;
         bottom: 0;
@@ -940,72 +866,9 @@ textarea:focus-visible {
         height: auto;
         max-height: 50vh;
     }
-    
-    /* 设置抽屉在手机上全屏 */
     .settings-drawer {
-        width: 100% !important;
-        max-width: 100vw !important;
-    }
-    
-    /* 浮动控制按钮在手机上调整位置 */
-    .camera-control-panel {
-        bottom: var(--space-sm) !important;
-        right: var(--space-sm) !important;
-        padding: var(--space-xs) !important;
-    }
-    
-    .control-icon-btn {
-        min-width: 40px !important;
-        min-height: 40px !important;
-        padding: var(--space-xs) !important;
-        font-size: 18px !important;
-    }
-    
-    /* 信息卡片在手机上优化间距 */
-    .info-group {
-        margin-bottom: var(--space-sm) !important;
-        padding: var(--space-sm) !important;
-    }
-    
-    /* 历史记录区域在手机上优化 */
-    .history-section {
-        max-height: 150px !important;
-    }
-    
-    /* 字体大小在手机上稍微缩小 */
-    :root {
-        --font-h1: 24px;
-        --font-h2: 20px;
-        --font-h3: 18px;
-        --font-body-large: 16px;
-        --font-body: 14px;
-        --font-body-small: 12px;
-    }
-}
-
-/* 小屏幕手机优化 (小于480px) */
-@media (max-width: 480px) {
-    /* 更紧凑的布局 */
-    header[role="banner"] h1 {
-        font-size: var(--font-h3) !important;
-    }
-    
-    /* 按钮文字可能隐藏，只显示图标 */
-    header[role="banner"] button {
-        padding: var(--space-xs) !important;
-        min-width: 36px !important;
-        min-height: 36px !important;
-    }
-    
-    /* 视频容器在小屏幕上使用更小的padding */
-    .video-container {
-        padding: 0 !important;
-    }
-    
-    /* 右侧面板在小屏幕上更紧凑 */
-    div[style*="flex: '0 0 40%'"] {
-        padding: var(--space-xs) !important;
-        gap: var(--space-sm) !important;
+        width: 100%;
+        max-width: 100vw;
     }
 }
 

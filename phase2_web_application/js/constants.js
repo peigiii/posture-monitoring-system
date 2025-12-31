@@ -1,7 +1,7 @@
 // ============================================================================
-// CONSTANTS DEFINITION AREA
+// 常量定义区域 (CONSTANTS)
 // ============================================================================
-// Defines all constants used in the system, including landmark indices, colors, thresholds, etc.
+// 定义系统中使用的所有常量，包括关键点索引、颜色、阈值等
 // ============================================================================
 
 const POSE_LANDMARKS = {
@@ -27,111 +27,111 @@ const COLORS = {
 };
 
 const FPS = 30;
-const ALIGNMENT_THRESHOLD = 250; // Relaxed threshold, changed from 100 to 250
-const ALIGNMENT_THRESHOLD_PERFECT = 150; // Perfect alignment threshold
+const ALIGNMENT_THRESHOLD = 250; // 放宽阈值，从100改为250
+const ALIGNMENT_THRESHOLD_PERFECT = 150; // 完美对齐阈值
 const DEFAULT_NECK_THRESHOLD = 40;
-const DEFAULT_TORSO_THRESHOLD = 15; // Updated to 15°, more reasonable default value
+const DEFAULT_TORSO_THRESHOLD = 15; // 更新为15°，更合理的默认值
 const WARNING_TIME = 180; // 3 minutes
-const MIN_LANDMARK_VISIBILITY = 0.5; // Minimum landmark confidence
-const DEPTH_DIFF_THRESHOLD = 0.1; // Depth difference threshold (for view detection)
+const MIN_LANDMARK_VISIBILITY = 0.5; // 关键点最小可信度
+const DEPTH_DIFF_THRESHOLD = 0.1; // 深度差阈值（用于视角检测）
 
-// View angle detection thresholds (pixels)
-const VIEW_ANGLE_SIDE_THRESHOLD = 80;      // Side view threshold (shoulder distance < 80px)
-const VIEW_ANGLE_FRONT_THRESHOLD = 150;    // Front view threshold (shoulder distance > 150px)
+// 视角检测阈值（像素）
+const VIEW_ANGLE_SIDE_THRESHOLD = 80;      // 侧面对齐阈值（肩膀距离 < 80px）
+const VIEW_ANGLE_FRONT_THRESHOLD = 150;    // 正面对齐阈值（肩膀距离 > 150px）
 
-// Front view detection thresholds (pixels) - synchronized with evaluation script
-const FRONT_SHOULDER_THRESHOLD_DEFAULT = 30;  // Default shoulder height difference threshold (adjusted from 50 to 30, synchronized with evaluation script)
-const FRONT_HEAD_THRESHOLD_DEFAULT = 25;      // Default head height difference threshold (adjusted from 40 to 25, synchronized with evaluation script)
-const FRONT_HIP_THRESHOLD = 25;                // Hip height difference threshold (adjusted from 15 to 25, synchronized with evaluation script)
+// 正面模式检测阈值（像素）- 与评估脚本同步
+const FRONT_SHOULDER_THRESHOLD_DEFAULT = 30;  // 默认肩膀高度差阈值（从50调整为30，与评估脚本同步）
+const FRONT_HEAD_THRESHOLD_DEFAULT = 25;      // 默认头部高度差阈值（从40调整为25，与评估脚本同步）
+const FRONT_HIP_THRESHOLD = 25;                // 髋部高度差阈值（从15调整为25，与评估脚本同步）
 
-// Angle judgment thresholds (degrees)
-const NECK_ANGLE_SEVERE = 50;      // Severe neck forward tilt
-const NECK_ANGLE_MODERATE = 40;    // Moderate neck forward tilt
-const NECK_ANGLE_MILD = 30;        // Mild neck forward tilt
-const TORSO_ANGLE_SEVERE = 15;     // Severe torso forward tilt
-const TORSO_ANGLE_MODERATE = 10;   // Moderate torso forward tilt
-const TORSO_ANGLE_MILD = 5;        // Mild torso forward tilt
+// 角度判定阈值（度）
+const NECK_ANGLE_SEVERE = 50;      // 严重颈部前倾
+const NECK_ANGLE_MODERATE = 40;    // 中等颈部前倾
+const NECK_ANGLE_MILD = 30;        // 轻微颈部前倾
+const TORSO_ANGLE_SEVERE = 15;     // 严重躯干前倾
+const TORSO_ANGLE_MODERATE = 10;   // 中等躯干前倾
+const TORSO_ANGLE_MILD = 5;        // 轻微躯干前倾
 
-// Smoothing and hysteresis settings
-const SMOOTHING_WINDOW_SIZE = 10;  // Angle smoothing window size (frames)
-const HYSTERESIS_VALUE = 2;         // Hysteresis threshold (degrees)
+// 平滑和滞后设置
+const SMOOTHING_WINDOW_SIZE = 10;  // 角度平滑窗口大小（帧数）
+const HYSTERESIS_VALUE = 2;         // 滞后阈值（度）
 
-// Reference point offset (pixels)
-const REFERENCE_POINT_OFFSET = 100; // Vertical reference point offset (for angle calculation)
+// 参考点偏移（像素）
+const REFERENCE_POINT_OFFSET = 100; // 垂直参考点偏移（用于角度计算）
 
 // ============================================================================
-// SCI PATIENT THRESHOLD CONFIGURATION SYSTEM
+// SCI患者专用阈值配置系统 (SCI Patient Threshold Configuration)
 // ============================================================================
 const SCI_THRESHOLDS = {
-    // Standard mode (healthy individuals)
+    // 标准模式（健康人群）
     standard: {
         neck: 40,
         torso: 15,
         shoulder: 30,
         hip: 25,
         head: 25,
-        weightedScoreThreshold: 0.70  // 70% or above is good
+        weightedScoreThreshold: 0.70  // 70%以上为良好
     },
-    // SCI relaxed mode (early rehabilitation/severe patients)
+    // SCI宽松模式（早期康复/严重患者）
     sciRelaxed: {
         neck: 50,      // +10°
         torso: 25,     // +10°
         shoulder: 40,  // +10px
         hip: 35,       // +10px
         head: 35,      // +10px
-        weightedScoreThreshold: 0.60  // 60% or above is good (more lenient)
+        weightedScoreThreshold: 0.60  // 60%以上为良好（更宽松）
     },
-    // SCI strict mode (late rehabilitation/mild patients)
+    // SCI严格模式（后期康复/轻度患者）
     sciStrict: {
         neck: 45,      // +5°
         torso: 20,     // +5°
         shoulder: 35,  // +5px
         hip: 30,       // +5px
         head: 30,      // +5px
-        weightedScoreThreshold: 0.65  // 65% or above is good
+        weightedScoreThreshold: 0.65  // 65%以上为良好
     }
 };
 
-// Current threshold mode in use (can be loaded from localStorage for user settings)
+// 当前使用的阈值模式（可以从localStorage读取用户设置）
 let currentThresholdMode = 'standard'; // 'standard' | 'sciRelaxed' | 'sciStrict'
 
 /**
- * Get current mode's threshold configuration
+ * 获取当前模式的阈值配置
  */
 function getCurrentThresholds() {
     return SCI_THRESHOLDS[currentThresholdMode] || SCI_THRESHOLDS.standard;
 }
 
 /**
- * Set threshold mode (enhanced version: supports React state updates)
+ * 设置阈值模式（增强版：支持React状态更新）
  */
 function setThresholdMode(mode, updateStateCallback = null) {
     if (SCI_THRESHOLDS[mode]) {
         currentThresholdMode = mode;
-        // Save to localStorage
+        // 保存到localStorage
         try {
             localStorage.setItem('postureThresholdMode', mode);
         } catch (e) {
-            console.warn('Unable to save threshold mode setting:', e);
+            console.warn('无法保存阈值模式设置:', e);
         }
-        // If state update callback is provided, call it
+        // 如果提供了状态更新回调，调用它
         if (updateStateCallback && typeof updateStateCallback === 'function') {
             updateStateCallback(mode);
         }
     }
 }
 
-// Load threshold mode from localStorage
+// 从localStorage加载阈值模式
 try {
     const savedMode = localStorage.getItem('postureThresholdMode');
     if (savedMode && SCI_THRESHOLDS[savedMode]) {
         currentThresholdMode = savedMode;
     }
 } catch (e) {
-    console.warn('Unable to load threshold mode setting:', e);
+    console.warn('无法加载阈值模式设置:', e);
 }
 
-// Export functions to global scope
+// 导出函数到全局作用域
 window.getCurrentThresholds = getCurrentThresholds;
 window.setThresholdMode = setThresholdMode;
 
